@@ -1,0 +1,1007 @@
+**************
+**************
+
+
+التسجيل
+تسجيل الدخول
+الخريطة
+التكبير والتصغير
+تحديث علامة الموقع دون تحديث الخريطة بالكامل
+السرعة 
+الناف بار
+زر التوسيط
+اصلاح مشكلة عدم توفر الموقع
+نقل ملفات سي اس اس
+حفظ الموقع والسرعة في قاعدة البيانات مع التحديث
+اضافة اسم المستخدم لواجهة التسجيل
+تخزين الايميل واسم المستخدم في ريل تايم مع الاحداثيات
+جلب معلومات المستخدم وعرضها عند النقر على علامة الموقع
+تنظيم الكود
+
+
+
+HOME.html
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تتبع الموقع الحي</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="main.css"/></head>
+<body>
+
+
+    <div id="map"></div>
+    <div id="speed" onclick="location.reload();" >السرعة: 0 كم/س</div>
+
+
+    <nav class="nav-bar">
+        <div class="nav-buttons">
+            <button class="nav-button" title="القائمة">
+                <i class="fas fa-bars"></i>
+            </button>
+            <button class="nav-button" title="تعديل">
+                <i class="fas fa-edit"></i>
+            </button>
+            
+            <button class="nav-button" id="centerButton"  title="توسيط الموقع">
+                <i class="fas fa-crosshairs"></i>
+            </button>
+
+            </button>
+           <button class="nav-button logout-btn" title="تسجيل الخروج">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </nav>
+
+
+
+
+
+
+
+
+<!--
+###############################################################################
+###############################################################################
+                            قواعد البيانات
+###############################################################################
+###############################################################################
+ -->
+
+
+    
+
+    <!-- Firebase و Leaflet scripts -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script type="module">
+        // استيراد الوظائف اللازمة من Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+        import { getDatabase, ref, update, onDisconnect } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+    
+        // استيراد دوال الوصول إلى البيانات من Firebase
+        import { get, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+    
+        // تكوين Firebase باستخدام الإعدادات الخاصة بك
+        const firebaseConfig = {
+            apiKey: "AIzaSyB9ZqQCZG9g3qclDz-kLHrNQparJT_iBXc", // مفتاح API للتطبيق
+            authDomain: "mypro-d8761.firebaseapp.com", // نطاق المصادقة
+            databaseURL: "https://mypro-d8761-default-rtdb.firebaseio.com", // عنوان قاعدة البيانات
+            projectId: "mypro-d8761", // معرف المشروع في Firebase
+            storageBucket: "mypro-d8761.appspot.com", // حاوية التخزين
+            messagingSenderId: "439741574644", // معرف مرسل الرسائل
+            appId: "1:439741574644:web:50b693546c7d32a5579da1" // معرف التطبيق في Firebase
+        };
+    
+        // تهيئة التطبيق باستخدام التكوين الذي تم تحديده
+        const app = initializeApp(firebaseConfig); // تهيئة التطبيق مع إعدادات Firebase
+        const auth = getAuth(app); // الحصول على خدمة المصادقة
+        const db = getDatabase(app); // الحصول على قاعدة البيانات
+    
+        // مراقبة حالة المستخدم (إذا كان قد سجل الدخول أم لا)
+        onAuthStateChanged(auth, (user) => {
+            if (user) {  // إذا كان المستخدم قد سجل الدخول
+                console.log("المستخدم مسجل دخول:", user.uid); // عرض معرف المستخدم المسجل دخوله
+                const userRef = ref(db, 'users/' + user.uid);  // تحديد مرجع بيانات المستخدم في قاعدة البيانات
+    
+                // إعداد وظيفة الحذف التلقائي عند قطع الاتصال (تم التعليق هنا)
+                // onDisconnect(userRef).remove();  // حذف البيانات عندما ينقطع الاتصال
+    
+                // دالة لحفظ بيانات الموقع والسرعة في قاعدة البيانات
+                window.saveToDB = (lat, lng, speed) => {
+                    console.log("حفظ البيانات للمستخدم:", user.uid, { lat, lng, speed }); // طباعة بيانات الموقع والسرعة
+                    
+                    // تحديث بيانات المستخدم في قاعدة البيانات
+                    update(userRef, {
+                        latitude: lat, // تحديث خط العرض
+                        longitude: lng, // تحديث خط الطول
+                        speed: speed, // تحديث السرعة
+                        timestamp: Date.now() // تحديث الطابع الزمني
+                    }).then(() => {
+                        console.log("تم حفظ البيانات بنجاح"); // طباعة رسالة نجاح
+                    }).catch((error) => {
+                        console.error('خطأ في حفظ البيانات:', error); // طباعة رسالة خطأ في حال فشل حفظ البيانات
+                    });
+    
+                    // إضافة مستمع لتحديث بيانات المستخدم في الوقت الحقيقي
+                    onValue(userRef, (snapshot) => {
+                        const userData = snapshot.val(); // الحصول على بيانات المستخدم من قاعدة البيانات
+                        window.userInfo = {
+                            username: userData?.username || 'غير معروف', // الحصول على اسم المستخدم
+                            email: user.email, // الحصول على البريد الإلكتروني للمستخدم
+                            speed: userData?.speed || 0, // الحصول على السرعة
+                            coords: userData ? [userData.latitude, userData.longitude] : [0, 0] // الحصول على الإحداثيات
+                        };
+                    });
+                };
+            } else {
+                window.location.href = "login.html"; // إذا لم يكن المستخدم مسجلاً دخوله، إعادة التوجيه إلى صفحة تسجيل الدخول
+            }
+        });
+    
+        // إضافة حدث لتسجيل الخروج عند الضغط على زر الخروج
+        document.querySelector('.logout-btn').addEventListener('click', async () => {
+            try {
+                await signOut(auth); // تسجيل الخروج من Firebase
+                window.location.href = 'login.html'; // إعادة التوجيه إلى صفحة تسجيل الدخول بعد الخروج
+            } catch (error) {
+                console.error("خطأ في تسجيل الخروج:", error); // طباعة رسالة خطأ في حال فشل تسجيل الخروج
+                alert("حدث خطأ أثناء محاولة تسجيل الخروج"); // عرض رسالة تنبيه في حال حدوث خطأ
+            }
+        });
+    
+    </script>
+    
+
+
+
+
+
+
+
+<!--
+###############################################################################
+###############################################################################
+                            الخريطة
+###############################################################################
+###############################################################################
+ -->
+
+
+
+
+<script>
+
+    // تعريف الرمز النابض (الرمز الذي يظهر على الخريطة ليعكس الحركة)
+    const redPulseIcon = L.divIcon({
+        className: 'pulsing-marker', // تخصيص اسم الكلاس
+        iconSize: [20, 20], // حجم الرمز
+        iconAnchor: [10, 10] // نقطة التثبيت داخل الرمز
+    });
+
+    // تهيئة الخريطة بموقع البداية
+    let map = L.map('map', {
+        zoomControl: false // إيقاف التحكم في التكبير/التصغير الافتراضي
+    }).setView([24.774265, 46.738586], 13); // تعيين الموقع الأولي (خط العرض، خط الطول) ومستوى التكبير
+
+    // المتغيرات
+    let marker = null; // لتخزين المؤشر
+    let path = []; // لتخزين المسار الذي سيتبعه المستخدم
+    let polyline = null; // لتخزين المسار المتصل بين المواقع
+    let isFirstUpdate = true; // لتحديد ما إذا كان هذا هو التحديث الأول للموقع
+    let currentPosition = null; // لتخزين الموقع الحالي
+
+    // إضافة طبقة الخريطة من OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    // العنصر الذي يعرض السرعة
+    const speedElement = document.getElementById('speed');
+    const centerButton = document.getElementById('centerButton'); // مرجع لزر التوسيط على الخريطة
+
+    // دالة لتحديث الموقع بشكل مستمر
+    function updateLocation(position) {
+        const lat = position.coords.latitude; // استخراج خط العرض
+        const lng = position.coords.longitude; // استخراج خط الطول
+        const speed = position.coords.speed * 3.6; // تحويل السرعة من متر/ثانية إلى كم/ساعة
+
+        currentPosition = { lat, lng }; // تحديث الموقع الحالي
+
+        // إذا لم يكن هناك مؤشر، سيتم إضافته على الخريطة
+        if (!marker) {
+            marker = L.marker([lat, lng], { icon: redPulseIcon }) // إضافة رمز نابض على الخريطة
+                .bindPopup(createPopupContent(speed, lat, lng)) // ربط المحتوى بالنوافذ المنبثقة
+                .addTo(map);
+        } else {
+            marker.setLatLng([lat, lng]) // تحديث موقع المؤشر
+                .setPopupContent(createPopupContent(speed, lat, lng)); // تحديث محتوى النافذة المنبثقة
+        }
+
+        // إضافة الإحداثيات إلى المسار
+        path.push([lat, lng]);
+
+        // إذا كان هناك مسار سابق، يتم إزالته
+        if (polyline) map.removeLayer(polyline);
+        polyline = L.polyline(path, {color: 'red'}).addTo(map); // رسم المسار على الخريطة باللون الأحمر
+
+        // تحديث السرعة المعروضة
+        speedElement.textContent = `السرعة: ${speed.toFixed(1)} كم/س`;
+
+        // إذا كان هذا هو التحديث الأول، يتم تكبير الخريطة إلى الموقع الحالي
+        if (isFirstUpdate) {
+            map.setView([lat, lng], 13);
+            isFirstUpdate = false;
+        }
+
+        // حفظ البيانات في Firebase إذا كانت الدالة موجودة
+        if (typeof window.saveToDB === 'function') {
+            window.saveToDB(lat, lng, speed.toFixed(1));
+        }
+    }
+
+    // دالة لمعالجة الأخطاء في تحديد الموقع
+    function handleError(error) {
+        console.error('Geolocation error:', error);
+        speedElement.textContent = 'خطأ في تحديد الموقع انقر للتحديث 🔄!'; // عرض رسالة خطأ
+    }
+
+    // إذا كانت خاصية تحديد الموقع مدعومة، نبدأ في مراقبة الموقع
+    if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(updateLocation, handleError, {
+            enableHighAccuracy: true, // تفعيل الدقة العالية
+            maximumAge: 30000, // الحد الأقصى لعمر البيانات المخزنة
+            timeout: 27000 // الحد الأقصى للوقت قبل انقضاء التحديد
+        });
+    }
+
+    // تحديث حجم الخريطة عند تغيير حجم الشاشة
+    window.addEventListener('resize', () => {
+        map.invalidateSize(); // تحديث حجم الخريطة
+    });
+
+    // إضافة تحكم في التكبير/التصغير مع تغيير الموضع إلى أسفل يمين الصفحة
+    L.control.zoom({
+        position: 'bottomright'
+    }).addTo(map);
+
+    // دالة التوسيط المعدلة التي تركز على الموقع الحالي
+    function focusOnLocation() {
+        if (currentPosition) {
+            map.setView([currentPosition.lat, currentPosition.lng], 13); // توسيط الخريطة على الموقع الحالي
+            marker.openPopup(); // فتح النافذة المنبثقة للمؤشر
+            setTimeout(() => marker.closePopup(), 3000); // إغلاق النافذة المنبثقة بعد 3 ثواني
+        } else {
+            alert("لا يوجد موقع متاح حاليًا!"); // إذا لم يكن هناك موقع متاح، عرض تنبيه
+        }
+    }
+
+    // إضافة حدث للنقر على زر التوسيط
+    document.getElementById('centerButton').addEventListener('click', focusOnLocation);
+
+    // دالة لإنشاء محتوى النافذة المنبثقة
+    function createPopupContent(speed, lat, lng) {
+        return `
+            <div dir="rtl" style="text-align: right;">
+                <h4 style="margin: 5px 0;">معلومات المستخدم</h4>
+                <hr style="margin: 5px 0;">
+                <b>الاسم:</b> ${window.userInfo?.username || 'غير معروف'}<br>
+                <b>الإيميل:</b> ${window.userInfo?.email || 'غير معروف'}<br>
+                <b>السرعة:</b> ${speed.toFixed(1)} كم/س<br>
+                <b>الإحداثيات:</b><br>
+                ${lat.toFixed(6)}, ${lng.toFixed(6)}
+            </div>
+        `;
+    }
+
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+MAIN.CSS
+
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+}
+
+.nav-bar {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    padding: 1rem;
+    position: fixed;
+    width: 100%;
+    bottom: 0; /* تغيير الموقع إلى الأسفل */
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: 0.3s;
+    height: 70px; /* زيادة ارتفاع الناف بار */
+}
+
+.nav-buttons {
+    display: flex;
+    gap: 15px; /* زيادة المسافة بين الأزرار */
+    align-items: center;
+}
+
+.nav-button {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    font-size: 1.8rem; /* زيادة حجم الأيقونات */
+    cursor: pointer;
+    padding: 10px; /* زيادة الحشو */
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: 0.3s;
+    min-width: 60px; /* تحديد حجم ثابت */
+    height: 60px; /* تحديد حجم ثابت */
+}
+
+.nav-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+}
+
+#map {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: 500;
+}
+
+#speed {
+    position: fixed;
+    top: 20px; /* تغيير الموقع إلى الأعلى */
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    padding: 15px 30px;
+    border-radius: 30px;
+    z-index: 1000;
+    font-size: 1.3rem; /* زيادة حجم الخط */
+    backdrop-filter: blur(5px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+@media (max-width: 768px) {
+    .nav-bar {
+        padding: 0.8rem;
+        height: 80px; /* تعديل الارتفاع للجوال */
+    }
+    
+    .nav-button {
+        font-size: 1.4rem;
+        min-width: 50px;
+        height: 50px;
+        padding: 12px;
+    }
+    
+    .nav-buttons {
+        gap: 15px;
+    }
+    
+    #speed {
+        font-size: 1.1rem;
+        padding: 10px 20px;
+    }
+}
+
+#centerButton {
+  border: 0.5px solid rgb(7, 87, 58) !important;
+}
+
+
+
+
+
+
+
+
+
+    .pulsing-marker {
+        position: relative;
+        width: 20px;
+        height: 20px;
+    }
+
+    .pulsing-marker::before {
+        content: '';
+        display: block;
+        width: 100%;
+        height: 100%;
+        background-color: red;
+        border-radius: 50%;
+        position: absolute;
+        animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+        0% {
+            transform: scale(0.6);
+            opacity: 1;
+        }
+        100% {
+            transform: scale(1.5);
+            opacity: 0;
+        }
+    }
+
+    .pulsing-marker::after {
+        content: '';
+        display: block;
+        width: 12px;
+        height: 12px;
+        background-color: red;
+        border-radius: 50%;
+        position: absolute;
+        top: 4px;
+        left: 4px;
+    }
+
+
+
+
+
+
+
+
+
+
+/* في ملف main.css */
+.leaflet-popup-content {
+    min-width: 200px;
+    font-family: 'Arial', sans-serif;
+}
+
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+.leaflet-popup-content h4 {
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.pulsing-marker {
+    background: #ff0000;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: pulse 1.5s infinite;
+    box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+AUTH.JS
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
+import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB9ZqQCZG9g3qclDz-kLHrNQparJT_iBXc",
+  authDomain: "mypro-d8761.firebaseapp.com",
+  databaseURL: "https://mypro-d8761-default-rtdb.firebaseio.com",
+  projectId: "mypro-d8761",
+  storageBucket: "mypro-d8761.appspot.com",
+  messagingSenderId: "439741574644",
+  appId: "1:439741574644:web:50b693546c7d32a5579da1"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const database = getDatabase(app);
+
+// عناصر DOM
+const submitButton = document.getElementById("submit");
+const signupButton = document.getElementById("sign-up");
+const createAcctBtn = document.getElementById("create-acct-btn");
+const returnBtn = document.getElementById("return-btn");
+const mainForm = document.getElementById("main");
+const createAcctForm = document.getElementById("create-acct");
+const errorMessages = document.querySelectorAll('.error-message');
+
+// إدارة حالة النماذج
+const showForm = (show, hide) => {
+  hide.classList.add('form-hidden');
+  setTimeout(() => {
+    hide.style.display = 'none';
+    show.style.display = 'block';
+    setTimeout(() => {
+      show.classList.remove('form-hidden');
+      show.classList.add('form-visible');
+    }, 50);
+  }, 400);
+};
+
+// إضافة تأثير التحميل على الأزرار
+const handleButtonLoader = (button, isLoading) => {
+  if (isLoading) {
+    button.innerHTML = `<span class="loading-spinner">⏳</span> ${button.textContent}`;
+    button.disabled = true;
+  } else {
+    button.innerHTML = button.textContent;
+    button.disabled = false;
+  }
+};
+
+// أحداث الأزرار
+signupButton.addEventListener('click', () => showForm(createAcctForm, mainForm));
+returnBtn.addEventListener('click', () => showForm(mainForm, createAcctForm));
+
+// معالجة إنشاء الحساب
+createAcctBtn.addEventListener('click', async (e) => {
+  e.preventDefault();
+  handleButtonLoader(createAcctBtn, true);
+  
+  const username = document.getElementById('username-signup').value;
+  const email = document.getElementById('email-signup').value;
+  const confirmEmail = document.getElementById('confirm-email-signup').value;
+  const password = document.getElementById('password-signup').value;
+  const confirmPassword = document.getElementById('confirm-password-signup').value;
+
+  if (!username || !email || !confirmEmail || !password || !confirmPassword) {
+    createAcctForm.querySelector('.error-message').style.display = 'block';
+    handleButtonLoader(createAcctBtn, false);
+    return;
+  }
+
+  if (email !== confirmEmail) {
+    alert('البريد الإلكتروني غير متطابق!');
+    handleButtonLoader(createAcctBtn, false);
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    alert('كلمة المرور غير متطابقة!');
+    handleButtonLoader(createAcctBtn, false);
+    return;
+  }
+
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(userCredential.user, { displayName: username });
+
+    // حفظ معلومات المستخدم في قاعدة البيانات
+    const userId = userCredential.user.uid;
+    await set(ref(database, 'users/' + userId), {
+      username: username,
+      email: email
+    });
+
+    alert('تم إنشاء الحساب بنجاح!');
+    window.location.href = 'home.html';
+  } catch (error) {
+    console.error('خطأ في إنشاء الحساب:', error);
+    alert(`خطأ: ${error.message}`);
+  } finally {
+    handleButtonLoader(createAcctBtn, false);
+  }
+});
+
+// معالجة تسجيل الدخول
+submitButton.addEventListener('click', async (e) => {
+  e.preventDefault();
+  handleButtonLoader(submitButton, true);
+
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    window.location.href = 'home.html';
+  } catch (error) {
+    console.error('خطأ في تسجيل الدخول:', error);
+    mainForm.querySelector('.error-message').style.display = 'block';
+  } finally {
+    handleButtonLoader(submitButton, false);
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+LOGIN.html
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الدخول</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- نموذج تسجيل الدخول -->
+    <div id="main">
+      <h1>تسجيل الدخول</h1>
+      <div class="error-message">خطأ في البريد الإلكتروني أو كلمة المرور</div>
+      
+      <div class="form-group">
+        <input id="email" type="email" placeholder="البريد الإلكتروني" required>
+      </div>
+      
+      <div class="form-group">
+        <input id="password" type="password" placeholder="كلمة المرور" required>
+      </div>
+      
+      <button id="submit" type="button">إرسال</button>
+      
+      <div class="separator">أو</div>
+      
+      <button id="sign-up">إنشاء حساب جديد</button>
+    </div>
+
+    <!-- نموذج إنشاء حساب -->
+    <div id="create-acct">
+      <h1>إنشاء حساب جديد</h1>
+      <div class="error-message">يجب ملء جميع الحقول المطلوبة</div>
+
+      <div class="form-group">
+        <input id="username-signup" type="text" placeholder="اسم المستخدم *" required>
+      </div>
+      
+      <div class="form-group">
+        <input id="email-signup" type="email" placeholder="البريد الإلكتروني *" required>
+      </div>
+      
+      <div class="form-group">
+        <input id="confirm-email-signup" type="email" placeholder="تأكيد البريد الإلكتروني *" required>
+      </div>
+      
+      <div class="form-group">
+        <input id="password-signup" type="password" placeholder="كلمة المرور *" required>
+      </div>
+      
+      <div class="form-group">
+        <input id="confirm-password-signup" type="password" placeholder="تأكيد كلمة المرور *" required>
+      </div>
+
+      <button id="create-acct-btn">إنشاء حساب</button>
+      <button id="return-btn">العودة لتسجيل الدخول</button>
+    </div>
+  </div>
+  
+  <script type="module" src="auth.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+STYLE.CSS
+
+/* style.css */
+:root {
+    --primary-color: #2D9596;
+    --secondary-color: #9AD0C2;
+    --background: #ECF4D6;
+    --text-dark: #265073;
+    --text-light: #F1FADA;
+    --error-color: #FF6B6B;
+  }
+  
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Tajawal', sans-serif;
+  }
+  
+  body {
+    background: var(--background);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    line-height: 1.6;
+  }
+  
+  .container {
+    width: 100%;
+    max-width: 400px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    padding: 2rem;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: slideUp 0.6s ease-out;
+  }
+  
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(40px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  h1 {
+    text-align: center;
+    color: var(--primary-color);
+    margin-bottom: 2rem;
+    font-size: 2rem;
+    position: relative;
+    padding-bottom: 0.5rem;
+  }
+  
+  h1::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 3px;
+    background: var(--secondary-color);
+    border-radius: 2px;
+  }
+  
+  .form-group {
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+  
+  input {
+    width: 100%;
+    padding: 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.9);
+  }
+  
+  input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(45, 149, 150, 0.2);
+  }
+  
+  input::placeholder {
+    color: #999;
+    opacity: 0.8;
+  }
+  
+  button {
+    width: 100%;
+    padding: 1rem;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  
+  #submit, #create-acct-btn {
+    background: var(--primary-color);
+    color: white;
+    margin-top: 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  #submit:hover, #create-acct-btn:hover {
+    background: #267A7B;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(45, 149, 150, 0.3);
+  }
+  
+  #sign-up, #return-btn {
+    background: transparent;
+    color: var(--primary-color);
+    border: 2px solid var(--primary-color);
+  }
+  
+  #sign-up:hover, #return-btn:hover {
+    background: rgba(45, 149, 150, 0.1);
+    transform: translateY(-2px);
+  }
+  
+  .error-message {
+    color: var(--error-color);
+    background: rgba(255, 107, 107, 0.1);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    display: none;
+    animation: shake 0.4s ease;
+  }
+  
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-8px); }
+    75% { transform: translateX(8px); }
+  }
+  
+  .separator {
+    text-align: center;
+    margin: 2rem 0;
+    color: #666;
+    position: relative;
+    opacity: 0.8;
+  }
+  
+  .separator::before,
+  .separator::after {
+    content: "";
+    display: inline-block;
+    width: 45%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #ddd, transparent);
+    vertical-align: middle;
+    margin: 0 1rem;
+  }
+  
+  /* تأثيرات التحويل بين النماذج */
+  #main, #create-acct {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .form-hidden {
+    opacity: 0;
+    transform: translateX(-30px);
+    pointer-events: none;
+    position: absolute;
+    width: 100%;
+  }
+  
+  .form-visible {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+  
+  /* تصميم متجاوب للهواتف */
+  @media (max-width: 480px) {
+    .container {
+      padding: 1.5rem;
+      border-radius: 16px;
+      margin: 1rem;
+    }
+  
+    h1 {
+      font-size: 1.75rem;
+    }
+  
+    input, button {
+      padding: 0.875rem;
+      font-size: 0.9rem;
+    }
+  
+    button {
+      font-size: 0.95rem;
+    }
+  
+    .separator::before,
+    .separator::after {
+      width: 40%;
+    }
+  }
+  
+  @media (max-width: 360px) {
+    .container {
+      padding: 1rem;
+    }
+  
+    h1 {
+      font-size: 1.5rem;
+    }
+  
+    input {
+      padding: 0.75rem;
+    }
+  }
+  
+  /* تأثيرات التحميل */
+  .loading-spinner {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-left: 8px;
+  }
+  
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+
+
+
+
+
